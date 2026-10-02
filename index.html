@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <!-- interactive-widget=resizes-content: cuando sale el teclado, la pantalla se encoge
+       y la barra de captura sube con él (si no, en Android el teclado la taparía). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Mis gastos</title>
+  <meta name="description" content="Apunta tus gastos escribiendo frases cortas. Sin cuentas, todo se guarda en tu móvil.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#edeff4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d1017" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/estilos.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Cabecera: navegación de mes (la rellena app.js) -->
+    <header id="cabecera" class="cabecera"></header>
+
+    <!-- Vista activa: Resumen, Historial o Ajustes (la rellena app.js) -->
+    <main id="vista" class="vista" tabindex="-1"></main>
+
+    <!-- Zona inferior fija: captura de gastos + pestañas -->
+    <footer class="dock">
+      <div class="captura">
+        <div class="segmentado segmentado-dock" id="metodo" role="radiogroup" aria-label="Método de pago">
+          <button type="button" role="radio" data-metodo="cuenta" aria-checked="true">💳 Cuenta</button>
+          <button type="button" role="radio" data-metodo="efectivo" aria-checked="false">💵 Efectivo</button>
+        </div>
+        <form id="captura" autocomplete="off">
+          <input id="frase" type="text" enterkeyhint="done" autocapitalize="sentences"
+                 autocomplete="off" spellcheck="false" aria-label="Nuevo gasto"
+                 placeholder="Ej: 3,50 en cafetería uni">
+          <button type="submit" class="btn-enviar" aria-label="Añadir gasto">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+        </form>
+      </div>
+
+      <nav class="tabs" aria-label="Secciones">
+        <button type="button" data-vista="resumen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>
+          <span>Resumen</span>
+        </button>
+        <button type="button" data-vista="historial">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>
+          <span>Historial</span>
+        </button>
+        <button type="button" data-vista="ajustes">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+          <span>Ajustes</span>
+        </button>
+      </nav>
+    </footer>
+  </div>
+
+  <!-- Hoja inferior de confirmación / edición (la rellena app.js) -->
+  <div id="hoja" hidden></div>
+
+  <!-- Avisos breves (con botón "Deshacer" cuando toca) -->
+  <div id="aviso" role="status" aria-live="polite"></div>
+
+  <noscript><p style="padding:1rem">Esta app necesita JavaScript activado.</p></noscript>
+</body>
+</html>
