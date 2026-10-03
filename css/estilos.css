@@ -6,8 +6,10 @@
  * protagonista es la barra de captura de abajo: oscura en modo claro,
  * y siempre al alcance del pulgar.
  *
- * Para cambiar la paleta, edita las variables de :root (y las de la
- * media query de modo oscuro).
+ * LOS COLORES YA NO SE EDITAN AQUÍ: los define el tema elegido en
+ * Ajustes (ver js/temas.js), que escribe estas mismas variables en
+ * <html> al arrancar. Los valores de :root son solo un respaldo por si
+ * el JavaScript tardara en cargar.
  * ============================================================ */
 
 :root {
@@ -31,7 +33,20 @@
   --dock-tenue: #9aa2b5;
   --dock-campo: #272b39;
 
+  --seg: #ffffff;              /* opción activa de los controles segmentados */
+  --dock-seg: #f4f5f8;         /* opción activa del toggle Cuenta/Efectivo */
+  --dock-seg-texto: #14161f;
+  --enviar: #f4f5f8;           /* botón de enviar */
+  --enviar-texto: #14161f;
+  --acento: #14161f;
+
   --peligro: #c4261d;
+
+  /* Colores de categorías (respaldo; los reales vienen del tema) */
+  --c-comida: #f97316; --c-super: #22c55e; --c-transporte: #3b82f6; --c-deporte: #ef4444;
+  --c-suscripciones: #a855f7; --c-estudios: #eab308; --c-ocio: #ec4899; --c-compras: #14b8a6;
+  --c-salud: #84cc16; --c-hogar: #6366f1; --c-otros: #94a3b8;
+
   --area-inf: env(safe-area-inset-bottom, 0px);
   --area-sup: env(safe-area-inset-top, 0px);
 }
@@ -50,6 +65,12 @@
     --dock-texto: #f1f3f8;
     --dock-tenue: #9aa2b5;
     --dock-campo: #0f121a;
+    --seg: #2c3244;
+    --dock-seg: #3a4157;
+    --dock-seg-texto: #ffffff;
+    --enviar: #ffffff;
+    --enviar-texto: #14161f;
+    --acento: #eceef4;
     --peligro: #ff6b61;
   }
 }
@@ -71,7 +92,7 @@ h1, h2, p, ul { margin: 0; padding: 0; }
 ul { list-style: none; }
 svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-:focus-visible { outline: 2px solid var(--tinta); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 .dock :focus-visible { outline-color: var(--dock-texto); }
 
 /* ---------- Estructura general ---------- */
@@ -155,7 +176,7 @@ h2 { font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; }
 
 /* ---------- Control segmentado (método de pago, tipo de gráfica, filtros) ---------- */
 .segmentado {
-  --seg-fondo: var(--realce); --seg-activo: var(--superficie); --seg-texto: var(--tenue); --seg-texto-activo: var(--tinta);
+  --seg-fondo: var(--realce); --seg-activo: var(--seg); --seg-texto: var(--tenue); --seg-texto-activo: var(--tinta);
   display: inline-flex; padding: 3px; gap: 2px; border-radius: 99px; background: var(--seg-fondo);
 }
 .segmentado button {
@@ -164,9 +185,6 @@ h2 { font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; }
 }
 .segmentado button[aria-checked="true"], .segmentado button[aria-pressed="true"] {
   background: var(--seg-activo); color: var(--seg-texto-activo); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / .12);
-}
-@media (prefers-color-scheme: dark) {
-  .segmentado { --seg-activo: #2c3244; }
 }
 
 /* ---------- Historial ---------- */
@@ -213,6 +231,54 @@ h2 { font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; }
 .aprendida button svg { width: 18px; height: 18px; }
 .version { margin-top: 28px; color: var(--tenue); font-size: .8125rem; text-align: center; }
 
+
+/* ---------- Saldos: línea en el Resumen y pestaña Cuentas ---------- */
+.negativo { color: var(--peligro); }
+
+.saldo-linea {
+  display: grid; grid-template-columns: 1fr auto; align-items: baseline; row-gap: 2px; width: 100%;
+  margin: 4px 0 24px; padding: 12px 16px; border-radius: 16px; background: var(--superficie);
+  font-variant-numeric: tabular-nums;
+}
+.saldo-linea > span { color: var(--tenue); font-size: .9375rem; }
+.saldo-linea > b { font-size: 1.125rem; font-weight: 650; }
+.saldo-linea > small { grid-column: 1 / -1; color: var(--tenue); font-size: .8125rem; }
+.saldo-linea:active { background: var(--realce); }
+
+.disponible { padding-top: 8px; }
+.disponible .total-nota { margin-top: 6px; }
+.cuentas { margin-top: 20px; background: var(--superficie); border-radius: 16px; padding: 4px 16px; }
+.cuenta-fila { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; min-height: 64px; font-variant-numeric: tabular-nums; }
+.cuenta-fila + .cuenta-fila { border-top: 1px solid var(--linea); }
+.cuenta-nombre { font-weight: 550; }
+.cuenta-importe { font-size: 1.1875rem; font-weight: 650; }
+.cuenta-fila .enlace { color: var(--tenue); font-size: .875rem; padding: 10px 0 10px 6px; text-decoration: underline; text-underline-offset: 3px; }
+
+.acciones-cuentas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+.acciones-cuentas .btn { padding: 0 12px; }
+
+.lista-mov-cab { margin-top: 28px; }
+.mov-importe-mas::before { content: '+'; }
+
+.inicio-saldos .campo { margin-top: 14px; }
+.inicio-saldos .campo > input { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.inicio-saldos .btn { width: 100%; margin-top: 20px; }
+
+/* ---------- Apariencia (selector de temas) ---------- */
+.bloque .segmentado { display: flex; margin: 8px 0 14px; }
+.temas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.tema {
+  display: grid; gap: 6px; padding: 6px 6px 8px; border-radius: 16px; border: 2px solid transparent; background: var(--superficie); text-align: center;
+}
+.tema[aria-pressed="true"] { border-color: var(--acento); }
+.tema-nombre { font-size: .8125rem; font-weight: 550; }
+.tema[aria-pressed="true"] .tema-nombre { font-weight: 700; }
+.tema-muestra { display: grid; align-content: space-between; gap: 8px; height: 76px; padding: 8px; border-radius: 11px; border: 1px solid var(--linea); }
+.tema-puntos { display: flex; gap: 4px; }
+.tema-puntos i { width: 12px; height: 12px; border-radius: 50%; }
+.tema-barra { display: flex; justify-content: flex-end; align-items: center; height: 18px; padding: 0 4px; border-radius: 9px; }
+.tema-barra i { width: 11px; height: 11px; border-radius: 50%; }
+
 /* ---------- Barra inferior: captura + pestañas ---------- */
 .dock { padding: 0 10px calc(4px + var(--area-inf)); }
 .captura {
@@ -220,10 +286,9 @@ h2 { font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; }
   display: grid; gap: 10px; box-shadow: 0 -8px 24px rgb(0 0 0 / .08), 0 2px 6px rgb(0 0 0 / .18);
 }
 .segmentado-dock {
-  --seg-fondo: var(--dock-campo); --seg-activo: var(--dock-texto); --seg-texto: var(--dock-tenue); --seg-texto-activo: var(--dock);
+  --seg-fondo: var(--dock-campo); --seg-activo: var(--dock-seg); --seg-texto: var(--dock-tenue); --seg-texto-activo: var(--dock-seg-texto);
   display: flex;
 }
-@media (prefers-color-scheme: dark) { .segmentado-dock { --seg-activo: #3a4157; --seg-texto-activo: #fff; } }
 .segmentado-dock button { min-height: 36px; }
 
 #captura { display: grid; grid-template-columns: 1fr 52px; gap: 8px; }
@@ -233,15 +298,15 @@ h2 { font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; }
 }
 #frase::placeholder { color: var(--dock-tenue); }
 #frase:focus-visible { outline: 2px solid var(--dock-texto); outline-offset: 0; }
-.btn-enviar { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--dock-texto); color: var(--dock); }
-@media (prefers-color-scheme: dark) { .btn-enviar { background: #fff; color: #14161f; } }
+.btn-enviar { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--enviar); color: var(--enviar-texto); }
 .btn-enviar svg { width: 24px; height: 24px; stroke-width: 2.4; }
 .btn-enviar:active { transform: scale(.95); }
 
-.tabs { display: grid; grid-template-columns: repeat(3, 1fr); padding-top: 4px; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); padding-top: 4px; }
 .tabs button { display: grid; justify-items: center; gap: 2px; min-height: 52px; padding: 6px 0; color: var(--tenue); font-size: .75rem; font-weight: 500; text-align: center; }
 .tabs svg { width: 24px; height: 24px; }
 .tabs button[aria-current="page"] { color: var(--tinta); font-weight: 650; }
+.tabs button[aria-current="page"] svg { color: var(--acento); stroke-width: 2.4; }
 
 /* ---------- Hoja de confirmación / edición ---------- */
 #hoja { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
@@ -257,7 +322,7 @@ h2 { font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; }
 .hoja h2 { font-size: 1.125rem; }
 
 .campo-importe { display: flex; align-items: baseline; gap: 6px; margin: 14px 0 6px; border-bottom: 2px solid var(--linea); }
-.campo-importe:focus-within { border-color: var(--tinta); }
+.campo-importe:focus-within { border-color: var(--acento); }
 #h-importe { flex: 1; min-width: 0; border: 0; background: none; outline: none; padding: 0 0 4px; font-size: 3rem; font-weight: 300; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
 .campo-importe-eur { font-size: 2rem; font-weight: 300; color: var(--tenue); }
 .campo-importe.error { border-color: var(--peligro); }
@@ -266,7 +331,7 @@ h2 { font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; }
 .campo > input[type="text"], .campo > input[type="date"] {
   min-height: 48px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--linea); background: var(--fondo); color: var(--tinta); font-size: 1rem;
 }
-.campo > input:focus-visible { outline: 2px solid var(--tinta); outline-offset: 0; }
+.campo > input:focus-visible { outline: 2px solid var(--acento); outline-offset: 0; }
 .campo .segmentado { display: flex; }
 
 .chip-cat {
@@ -283,7 +348,7 @@ h2 { font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; }
 .opcion-cat.activa { border-color: var(--tinta); font-weight: 650; }
 
 .recordar { display: flex; align-items: center; gap: 10px; margin-top: 16px; color: var(--tinta); font-size: .9375rem; }
-.recordar input { width: 22px; height: 22px; accent-color: var(--tinta); flex: none; }
+.recordar input { width: 22px; height: 22px; accent-color: var(--acento); flex: none; }
 
 .acciones { display: flex; gap: 10px; margin-top: 22px; }
 .btn { min-height: 54px; padding: 0 22px; border-radius: 16px; font-weight: 650; text-align: center; }
@@ -293,6 +358,10 @@ h2 { font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; }
 .btn-peligro { background: color-mix(in srgb, var(--peligro) 14%, transparent); color: var(--peligro); }
 .btn:active:not(:disabled) { transform: scale(.98); }
 
+/* Detalles de la hoja inferior */
+.nota-hoja { margin: 14px 0 0; }
+.btn-signo { align-self: center; width: 44px; height: 44px; border-radius: 50%; background: var(--realce); font-size: 1.25rem; font-weight: 600; text-align: center; }
+
 /* ---------- Aviso (toast) ---------- */
 #aviso { position: fixed; left: 0; right: 0; bottom: calc(var(--alto-dock, 140px) + 12px); z-index: 30; display: flex; justify-content: center; padding: 0 16px; pointer-events: none; }
 .aviso-caja {
@@ -301,6 +370,8 @@ h2 { font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; }
   opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: none;
 }
 #aviso.visible .aviso-caja { opacity: 1; transform: none; pointer-events: auto; }
+#aviso.arriba { bottom: auto; top: calc(var(--area-sup) + 12px); }
+.aviso-texto small { display: block; margin-top: 2px; opacity: .8; font-size: .8125rem; }
 .aviso-caja button { font-weight: 700; padding: 6px 4px; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
 
 @keyframes subir { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
