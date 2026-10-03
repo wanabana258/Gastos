@@ -11,7 +11,7 @@
  * Los datos de gastos NO se tocan nunca (viven en localStorage).
  * ============================================================ */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `gastos-${VERSION}`;
 
 // Todo lo necesario para arrancar sin internet (rutas relativas: valen en GitHub Pages)
@@ -27,6 +27,7 @@ const ARCHIVOS = [
   './js/almacen.js',
   './js/csv.js',
   './js/graficas.js',
+  './js/temas.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
