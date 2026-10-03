@@ -15,18 +15,22 @@
  * "cervezas") se reconocen automáticamente a partir del singular.
  * ============================================================ */
 
+// El color de cada categoría NO está aquí: lo define el tema activo (ver temas.js)
+// mediante las variables CSS --c-comida, --c-super, etc.
+const cat = (id, nombre, emoji) => ({ id, nombre, emoji, color: `var(--c-${id})` });
+
 export const CATEGORIAS = [
-  { id: 'comida',        nombre: 'Comida fuera',     emoji: '🍔', color: '#f97316' },
-  { id: 'super',         nombre: 'Supermercado',     emoji: '🛒', color: '#22c55e' },
-  { id: 'transporte',    nombre: 'Transporte',       emoji: '🚌', color: '#3b82f6' },
-  { id: 'deporte',       nombre: 'Deporte',          emoji: '💪', color: '#ef4444' },
-  { id: 'suscripciones', nombre: 'Suscripciones',    emoji: '🔁', color: '#a855f7' },
-  { id: 'estudios',      nombre: 'Estudios',         emoji: '📚', color: '#eab308' },
-  { id: 'ocio',          nombre: 'Ocio y salidas',   emoji: '🎉', color: '#ec4899' },
-  { id: 'compras',       nombre: 'Compras',          emoji: '🛍️', color: '#14b8a6' },
-  { id: 'salud',         nombre: 'Salud y cuidado',  emoji: '💊', color: '#84cc16' },
-  { id: 'hogar',         nombre: 'Hogar y facturas', emoji: '🏠', color: '#6366f1' },
-  { id: 'otros',         nombre: 'Otros',            emoji: '📦', color: '#94a3b8' },
+  cat('comida',        'Comida fuera',     '🍔'),
+  cat('super',         'Supermercado',     '🛒'),
+  cat('transporte',    'Transporte',       '🚌'),
+  cat('deporte',       'Deporte',          '💪'),
+  cat('suscripciones', 'Suscripciones',    '🔁'),
+  cat('estudios',      'Estudios',         '📚'),
+  cat('ocio',          'Ocio y salidas',   '🎉'),
+  cat('compras',       'Compras',          '🛍️'),
+  cat('salud',         'Salud y cuidado',  '💊'),
+  cat('hogar',         'Hogar y facturas', '🏠'),
+  cat('otros',         'Otros',            '📦'),
 ];
 
 const POR_ID = new Map(CATEGORIAS.map((c) => [c.id, c]));

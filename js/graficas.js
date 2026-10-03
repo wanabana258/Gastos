@@ -27,7 +27,7 @@ export function htmlDonut(categorias, total) {
       const largo = (c.cent / total) * C;
       const hueco = hayVarias ? Math.min(1.4, largo * 0.35) : 0; // separación entre arcos
       const trazo = Math.max(largo - hueco, 0.01);
-      const arco = `<circle cx="60" cy="60" r="${R}" fill="none" stroke="${c.color}" stroke-width="15"
+      const arco = `<circle cx="60" cy="60" r="${R}" fill="none" style="stroke:${c.color}" stroke-width="15"
         stroke-dasharray="${trazo.toFixed(2)} ${(C - trazo).toFixed(2)}"
         stroke-dashoffset="${(-acumulado).toFixed(2)}" transform="rotate(-90 60 60)"/>`;
       acumulado += largo;
@@ -54,7 +54,7 @@ export function htmlDonut(categorias, total) {
   return `
     <div class="donut" role="img" aria-label="Gasto por categoría. Mayor gasto: ${esc(mayor.nombre)}, ${porcentaje(mayor.cent, total)}">
       <svg viewBox="0 0 120 120" aria-hidden="true">
-        <circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--linea)" stroke-width="15" opacity=".35"/>
+        <circle cx="60" cy="60" r="${R}" fill="none" style="stroke:var(--linea)" stroke-width="15" opacity=".35"/>
         ${arcos}
       </svg>
       <div class="donut-centro">
