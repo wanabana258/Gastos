@@ -312,6 +312,26 @@ h2 { font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.01em; }
 .editor .campo:first-child { margin-top: 0; }
 .editor .campo .segmentado { margin-top: 2px; }
 .ayuda-izq { text-align: left; margin-top: 12px; }
+.ayuda-izq b { color: var(--tinta); font-weight: 600; }
+
+/* Barra Deshacer / Rehacer / Como al empezar: se queda fija arriba mientras bajas por los colores.
+   top:-4px y padding-top compensan el relleno de 4px del contenedor, para que nada asome por encima. */
+.editor-barra {
+  position: sticky; top: -4px; z-index: 5; display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 8px;
+  margin: 0 -2px 10px; padding: 8px 2px 8px; background: var(--fondo);
+}
+.btn-barra {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  min-height: 58px; padding: 6px 4px; border-radius: 14px; background: var(--superficie); color: var(--tinta);
+  font-size: .8125rem; font-weight: 600; line-height: 1.15; text-align: center;
+}
+.btn-barra > span { font-size: 1.25rem; line-height: 1; }
+.btn-barra small {
+  position: absolute; top: 5px; right: 7px; min-width: 20px; padding: 1px 6px; border-radius: 99px; background: var(--realce);
+  font-size: .6875rem; font-weight: 700; line-height: 1.3;
+}
+.btn-barra:disabled { opacity: .38; cursor: default; }
+.btn-barra:active:not(:disabled) { transform: scale(.97); }
 
 .legibilidad { margin: 14px 0 6px; }
 .legibilidad-ok { color: var(--tenue); font-size: .875rem; }
