@@ -536,6 +536,12 @@ function renderAjustes() {
     </section>
 
     <section class="bloque">
+      <h2>Actualizar</h2>
+      <p class="nota">Si no ves los cambios nuevos de la app, descarga de nuevo todos sus archivos. No borra tus datos.</p>
+      <button type="button" class="fila-boton" data-accion="actualizar-app">Actualizar la app ahora</button>
+    </section>
+
+    <section class="bloque">
       <h2>Límites por categoría</h2>
       <button type="button" class="fila-boton" data-accion="editar-limites">Límites mensuales <small>${Object.keys(almacen.limites()).length ? `${plural(Object.keys(almacen.limites()).length, 'fijado', 'fijados')}` : 'ninguno'}</small></button>
     </section>
@@ -610,6 +616,9 @@ elVista.addEventListener('click', (e) => {
     case 'editar-limites':
       abrirHojaLimites();
       break;
+    case 'actualizar-app':
+      actualizarApp();
+      break;
     case 'nuevo-pago':
       abrirHojaPago();
       break;
@@ -666,7 +675,17 @@ elVista.addEventListener('click', (e) => {
       render();
       vistaPreviaEditor();
       break;
+    case 'editor-deshacer':
+      deshacerEditor();
+      break;
+    case 'editor-rehacer':
+      rehacerEditor();
+      break;
+    case 'editor-principio':
+      volverAlPrincipio();
+      break;
     case 'editor-textos':
+      apuntarParaDeshacer();
       ajustarTextos(editor.tema[editor.esquema]);
       persistirEditor();
       render();
@@ -760,14 +779,112 @@ function htmlAccionesEditor() {
   return `
     <button type="button" class="fila-boton" data-accion="editor-textos">Ajustar textos para que se lean bien <small>blanco o negro</small></button>
     <button type="button" class="fila-boton" data-accion="editor-duplicar">Duplicar este tema</button>
-    ${estaModificado(id) ? '<button type="button" class="fila-boton" data-accion="editor-restaurar">Restaurar el original <small>borra tus cambios</small></button>' : ''}
+    ${estaModificado(id) ? '<button type="button" class="fila-boton" data-accion="editor-restaurar">Restaurar el original de fábrica <small>borra todos tus cambios</small></button>' : ''}
     ${!esDeFabrica(id) ? '<button type="button" class="fila-boton fila-peligro" data-accion="editor-eliminar">Eliminar este tema</button>' : ''}
     <button type="button" class="btn btn-prim btn-ancho" data-accion="editor-salir">Hecho</button>`;
 }
 
+/* ----- Deshacer, Rehacer y «Como al empezar» -----
+ * Cada cambio apunta cómo estaba el tema ANTES (pila de deshacer). Deshacer lo recupera y apunta el
+ * estado que había en la pila de rehacer. Cambios seguidos sobre el mismo color (arrastrar el selector,
+ * escribir un código) cuentan como un único paso. Cada paso recuerda en qué modo (claro/oscuro) se hizo,
+ * para llevarte allí al deshacerlo. «Como al empezar» vuelve al tema tal y como estaba al abrir el editor.
+ */
+const MAX_PASOS = 100;
+const copiaTema = (t) => JSON.parse(JSON.stringify(t));
+
+/** JSON con las claves ordenadas, para comparar dos temas. */
+function canon(v) {
+  if (Array.isArray(v)) return v.map(canon);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])]));
+  return v;
+}
+const sonIguales = (a, b) => JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+
+/** Llamar ANTES de cambiar el tema. `clave` agrupa los cambios seguidos sobre lo mismo en un solo paso. */
+function apuntarParaDeshacer(clave = null) {
+  const ahora = Date.now();
+  if (clave && editor.gesto?.clave === clave && ahora - editor.gesto.t < 1500) {
+    editor.gesto.t = ahora;
+    return;
+  }
+  editor.pila.push({ tema: copiaTema(editor.tema), esquema: editor.esquema });
+  if (editor.pila.length > MAX_PASOS) editor.pila.shift();
+  editor.rehacer = [];
+  editor.gesto = clave ? { clave, t: ahora } : null;
+}
+
+function htmlBarraEditor() {
+  const n = editor.pila.length;
+  const r = editor.rehacer.length;
+  const principio = sonIguales(editor.tema, editor.inicio);
+  return `
+    <button type="button" class="btn-barra" data-accion="editor-deshacer" ${n ? '' : 'disabled'} aria-label="Deshacer el último cambio${n ? ` (${n} pasos)` : ''}"><span aria-hidden="true">↶</span>Deshacer${n ? `<small aria-hidden="true">${n}</small>` : ''}</button>
+    <button type="button" class="btn-barra" data-accion="editor-rehacer" ${r ? '' : 'disabled'} aria-label="Rehacer el cambio que has deshecho${r ? ` (${r} pasos)` : ''}"><span aria-hidden="true">↷</span>Rehacer${r ? `<small aria-hidden="true">${r}</small>` : ''}</button>
+    <button type="button" class="btn-barra" data-accion="editor-principio" ${principio ? 'disabled' : ''} aria-label="Dejar el tema como estaba al abrir el editor"><span aria-hidden="true">⟲</span>Como al empezar</button>`;
+}
+
+function actualizarBarraEditor() {
+  const barra = $('#editor-barra');
+  if (barra) barra.innerHTML = htmlBarraEditor();
+}
+
+/** Pone en los campos lo que hay en editor.tema (sin repintar la pantalla, para no cerrar un selector abierto). */
+function refrescarCamposEditor() {
+  const nombre = $('#tema-nombre');
+  if (nombre) nombre.value = editor.tema.nombre;
+  elVista.querySelectorAll('.color-fila [data-color], .color-fila [data-catidx]').forEach((campo) => {
+    campo.value = 'catidx' in campo.dataset
+      ? editor.tema.categorias[Number(campo.dataset.catidx)]
+      : editor.tema[editor.esquema][campo.dataset.color];
+    campo.classList.remove('invalido');
+  });
+  actualizarAvisosLegibilidad();
+  actualizarVistaPrevia();
+  actualizarBarraEditor();
+}
+
+/** Tras deshacer / rehacer / volver al principio: guardar, enseñar y, si el paso era del otro modo, cambiar a él. */
+function aplicarCambioEditor(esquemaDelPaso = editor.esquema) {
+  editor.gesto = null;
+  const cambiaModo = esquemaDelPaso !== editor.esquema;
+  editor.esquema = esquemaDelPaso;
+  persistirEditor();
+  if (cambiaModo) render();
+  else refrescarCamposEditor();
+}
+
+function deshacerEditor() {
+  const paso = editor?.pila.pop();
+  if (!paso) return;
+  editor.rehacer.push({ tema: copiaTema(editor.tema), esquema: paso.esquema });
+  editor.tema = paso.tema;
+  aplicarCambioEditor(paso.esquema);
+}
+
+function rehacerEditor() {
+  const paso = editor?.rehacer.pop();
+  if (!paso) return;
+  editor.pila.push({ tema: copiaTema(editor.tema), esquema: paso.esquema });
+  editor.tema = paso.tema;
+  aplicarCambioEditor(paso.esquema);
+}
+
+/** Deja el tema como estaba al abrir el editor (y se puede deshacer). */
+function volverAlPrincipio() {
+  if (!editor || sonIguales(editor.tema, editor.inicio)) return;
+  apuntarParaDeshacer();
+  editor.tema = copiaTema(editor.inicio);
+  aplicarCambioEditor();
+  avisar('Tema como estaba al abrir el editor.', { texto: 'Deshacer', fn: deshacerEditor });
+}
+
 /** Guarda el tema en edición y lo refleja en la app. */
 function persistirEditor() {
-  almacen.guardarTemaPersonalizado(editor.tema);
+  const id = editor.tema.id;
+  // Un tema de fábrica idéntico al original no necesita guardarse (así no figura como «modificado»)
+  if (esDeFabrica(id) && sonIguales(editor.tema, temaCompleto(temaOriginal(id)))) almacen.eliminarTemaPersonalizado(id);
+  else almacen.guardarTemaPersonalizado(editor.tema);
   registrarTemasPersonalizados(almacen.listarTemasPersonalizados());
   vistaPreviaEditor();
   // Solo se repintan los botones (no los selectores de color, que podrían estar abiertos)
@@ -783,6 +900,10 @@ function abrirEditor() {
   const tema = temaPorId(almacen.preferencia('tema'));
   editor = {
     tema: temaCompleto(tema),
+    inicio: temaCompleto(tema),   // cómo estaba al abrir: a esto vuelve «Como al empezar»
+    pila: [],                     // pasos para deshacer
+    rehacer: [],                  // pasos deshechos que se pueden rehacer
+    gesto: null,
     esquema: esOscuro(almacen.preferencia('modo')) ? 'oscuro' : 'claro',
     abiertos: new Set(['pantalla']),
   };
@@ -819,6 +940,7 @@ function duplicarTema() {
   registrarTemasPersonalizados(almacen.listarTemasPersonalizados());
   almacen.guardarPreferencia('tema', nuevo.id);
   editor.tema = temaCompleto(nuevo);
+  Object.assign(editor, { inicio: temaCompleto(nuevo), pila: [], rehacer: [], gesto: null }); // la copia empieza su propio historial
   render();
   vistaPreviaEditor();
   avisar('Copia creada: ahora estás editando la copia.');
@@ -826,6 +948,7 @@ function duplicarTema() {
 
 function restaurarTema() {
   const id = editor.tema.id;
+  apuntarParaDeshacer(); // también se puede deshacer
   almacen.eliminarTemaPersonalizado(id);
   registrarTemasPersonalizados(almacen.listarTemasPersonalizados());
   editor.tema = temaCompleto(temaOriginal(id));
@@ -922,6 +1045,7 @@ function renderEditorTema() {
 
   elVista.innerHTML = `
     <section class="editor">
+      <div id="editor-barra" class="editor-barra">${htmlBarraEditor()}</div>
       ${htmlVistaPrevia()}
       <label class="campo">Nombre del tema
         <input id="tema-nombre" type="text" maxlength="24" autocomplete="off" value="${esc(t.nombre)}">
@@ -933,7 +1057,7 @@ function renderEditorTema() {
           <button type="button" data-accion="editor-esquema" data-valor="oscuro" aria-pressed="${editor.esquema === 'oscuro'}">🌙 Oscuro</button>
         </div>
       </div>
-      <p class="ayuda ayuda-izq">Los cambios se ven al momento en toda la app. Toca un color para cambiarlo, o escribe su código (por ejemplo #b97d7b).</p>
+      <p class="ayuda ayuda-izq">Los cambios se ven al momento en toda la app. Toca un color para cambiarlo, o escribe su código (por ejemplo #b97d7b). Con <b>Deshacer</b> y <b>Rehacer</b> vas y vuelves entre tus cambios; <b>Como al empezar</b> deja el tema como estaba al abrir el editor.</p>
 
       <div id="avisos-legibilidad" class="legibilidad" aria-live="polite">${htmlAvisosLegibilidad()}</div>
 
@@ -950,8 +1074,10 @@ elVista.addEventListener('input', (e) => {
   const el = e.target;
 
   if (el.id === 'tema-nombre') {
+    apuntarParaDeshacer('nombre');
     editor.tema.nombre = el.value.slice(0, 24);
     persistirEditor();
+    actualizarBarraEditor();
     return;
   }
   if (!('color' in el.dataset) && !('catidx' in el.dataset)) return;
@@ -967,15 +1093,22 @@ elVista.addEventListener('input', (e) => {
   fila.querySelector('input[type="color"]').value = valor;
   if (el.type === 'color') campoHex.value = valor;
 
-  if ('catidx' in el.dataset) editor.tema.categorias[Number(el.dataset.catidx)] = valor;
+  const esCategoria = 'catidx' in el.dataset;
+  const actual = esCategoria ? editor.tema.categorias[Number(el.dataset.catidx)] : editor.tema[editor.esquema][el.dataset.color];
+  if (actual === valor) return; // mismo color: no es un cambio
+
+  apuntarParaDeshacer(esCategoria ? `cat:${el.dataset.catidx}` : `${editor.esquema}:${el.dataset.color}`);
+  if (esCategoria) editor.tema.categorias[Number(el.dataset.catidx)] = valor;
   else editor.tema[editor.esquema][el.dataset.color] = valor;
   persistirEditor();
   actualizarAvisosLegibilidad();
   actualizarVistaPrevia();
+  actualizarBarraEditor();
 });
 
 /** Al terminar de escribir: nombre vacío → «Mi tema»; código a medias → vuelve al último color válido. */
 function cambioEnEditor(el) {
+  editor.gesto = null; // terminó el gesto (cerrar el selector, salir del campo): el siguiente cambio será otro paso
   if (el.id === 'tema-nombre') {
     if (!el.value.trim()) {
       editor.tema.nombre = nombreLibre('Mi tema');
@@ -2203,6 +2336,99 @@ new ResizeObserver(() => {
 }).observe(elDock);
 
 /* ============================================================
+ * 5b. Que la app no dependa de lo que el navegador tenga guardado de index.html
+ *
+ * Si el móvil conserva un index.html ANTIGUO (GitHub Pages hace que los navegadores guarden
+ * cada archivo 10 minutos), la app se vería a medias, p. ej. sin la pestaña Pagos. Defensas:
+ *   1. Las pestañas las dibuja app.js, no el HTML.
+ *   2. Si la versión de index.html no es la esperada, se descarga de nuevo y se recarga una vez.
+ *   3. Ajustes → «Actualizar la app ahora» lo fuerza a mano (no borra tus datos).
+ * ============================================================ */
+
+// Debe coincidir con <meta name="version-cascara"> de index.html: súbela en los dos sitios si cambias el HTML
+const VERSION_CASCARA = '6';
+
+// Archivos de la app (los mismos que en service-worker.js)
+const ARCHIVOS_APP = [
+  './', 'index.html', 'manifest.webmanifest', 'css/estilos.css', 'service-worker.js',
+  'js/app.js', 'js/almacen.js', 'js/analisis.js', 'js/categorias.js', 'js/csv.js', 'js/graficas.js',
+  'js/idb.js', 'js/pagos.js', 'js/parser.js', 'js/temas.js', 'js/utils.js',
+];
+
+const PESTANAS = [
+  { vista: 'resumen', texto: 'Resumen', icono: '<path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/>' },
+  { vista: 'historial', texto: 'Historial', icono: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>' },
+  { vista: 'pagos', texto: 'Pagos', icono: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/>' },
+  { vista: 'cuentas', texto: 'Cuentas', icono: '<rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10.5h18"/><path d="M16 15h2"/>' },
+  { vista: 'ajustes', texto: 'Ajustes', icono: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>' },
+];
+
+/** Dibuja las pestañas si el HTML no trae exactamente estas (p. ej. un index.html antiguo). */
+function construirPestanas() {
+  const nav = $('.tabs');
+  const alDia = nav.children.length === PESTANAS.length
+    && PESTANAS.every((p, i) => nav.children[i].dataset.vista === p.vista);
+  if (alDia) return;
+  nav.innerHTML = PESTANAS.map((p) => `
+    <button type="button" data-vista="${p.vista}">
+      <svg viewBox="0 0 24 24" aria-hidden="true">${p.icono}</svg><span>${p.texto}</span>
+      ${p.vista === 'pagos' ? '<b class="insignia" id="insignia-pagos" hidden></b>' : ''}
+    </button>`).join('');
+}
+
+/** Descarga index.html saltándose la caché HTTP y sustituye las copias guardadas por el service worker. */
+async function actualizarCascara() {
+  try {
+    const respuesta = await fetch('./index.html', { cache: 'reload' });
+    if (!respuesta.ok) return false;
+    for (const nombre of await caches.keys()) {
+      const cache = await caches.open(nombre);
+      for (const clave of await cache.keys()) {
+        const ruta = new URL(clave.url).pathname;
+        if (ruta.endsWith('/') || ruta.endsWith('/index.html')) await cache.put(clave, respuesta.clone());
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Si el index.html cargado no es el de esta versión, lo repara y recarga (como mucho una vez por versión). */
+async function repararCascaraSiHaceFalta() {
+  const CLAVE = 'gastos-app/cascara-intentada';
+  const cargada = document.querySelector('meta[name="version-cascara"]')?.content;
+  if (cargada === VERSION_CASCARA) {
+    localStorage.removeItem(CLAVE);
+    return;
+  }
+  if (localStorage.getItem(CLAVE) === VERSION_CASCARA || !navigator.onLine) return;
+  localStorage.setItem(CLAVE, VERSION_CASCARA);
+  if (await actualizarCascara()) location.reload();
+}
+
+/**
+ * «Actualizar la app ahora»: pide al servidor TODOS los archivos saltándose las cachés, vacía las copias
+ * guardadas y recarga. No toca tus datos (gastos, saldos, ajustes), que están en otro sitio.
+ */
+async function actualizarApp() {
+  if (!navigator.onLine) {
+    avisar('Necesitas conexión para actualizar.');
+    return;
+  }
+  avisar('Actualizando…');
+  try {
+    await Promise.all(ARCHIVOS_APP.map((a) => fetch(a, { cache: 'reload' }).catch(() => null)));
+    for (const nombre of await caches.keys()) await caches.delete(nombre);
+    const registro = await navigator.serviceWorker?.getRegistration();
+    await registro?.update();
+  } catch (error) {
+    console.warn('Actualización incompleta:', error);
+  }
+  location.reload();
+}
+
+/* ============================================================
  * 6. Arranque
  * ============================================================ */
 
@@ -2267,8 +2493,10 @@ document.addEventListener('visibilitychange', () => {
 const vistaInicial = new URLSearchParams(location.search).get('v');
 if (['resumen', 'historial', 'pagos', 'cuentas', 'ajustes'].includes(vistaInicial)) estado.vista = vistaInicial;
 
+construirPestanas();
 pintarMetodo();
 render();
+repararCascaraSiHaceFalta();
 if (apuntadosAlArrancar.length) avisar(textoApuntados(apuntadosAlArrancar));
 if (estado.vista === 'pagos') refrescarAvisos();
 document.getElementById('fallo-carga')?.remove(); // la app ha arrancado: fuera el aviso de error (si salió por ir lenta)
