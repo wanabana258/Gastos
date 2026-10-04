@@ -2246,7 +2246,12 @@ if ('serviceWorker' in navigator) {
 navigator.storage?.persist?.();
 
 // Pagos: apuntar los «se apunta solo» que ya tocan y dejar al día la copia para el service worker
-const apuntadosAlArrancar = aplicarPagosAutomaticos();
+let apuntadosAlArrancar = [];
+try {
+  apuntadosAlArrancar = aplicarPagosAutomaticos();
+} catch (error) { // un fallo en los pagos no debe impedir que la app arranque
+  console.error('No se pudieron aplicar los pagos fijos:', error);
+}
 sincronizarSW();
 
 // Al volver a la app (otro día, tras minimizarla...), repetir la comprobación
@@ -2266,3 +2271,4 @@ pintarMetodo();
 render();
 if (apuntadosAlArrancar.length) avisar(textoApuntados(apuntadosAlArrancar));
 if (estado.vista === 'pagos') refrescarAvisos();
+document.getElementById('fallo-carga')?.remove(); // la app ha arrancado: fuera el aviso de error (si salió por ir lenta)

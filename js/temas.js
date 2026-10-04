@@ -5,10 +5,15 @@
  * categorías. El usuario elige tema y modo (Automático / Claro / Oscuro)
  * en Ajustes → Apariencia.
  *
- * PARA AÑADIR UN TEMA: copia uno de los objetos de TEMAS, cámbiale el
- * `id` y los colores. Aparece solo en Ajustes. Todos los colores son
- * hex. Si cambias colores, comprueba que el texto se lee bien sobre su
- * fondo (contraste mínimo recomendado: 4,5 para texto normal).
+ * Los temas de abajo (TEMAS) son los que trae la app. Desde Ajustes →
+ * Apariencia → Editar tema puedes cambiar cualquiera de sus colores,
+ * renombrarlo, duplicarlo o crear temas nuevos. Esas versiones tuyas se
+ * guardan en el móvil (ver almacen.js) y tapan a las originales; puedes
+ * volver a la original con «Restaurar original».
+ *
+ * También puedes añadir temas «de fábrica» copiando un objeto de TEMAS,
+ * cambiando `id`, `nombre` y los colores (hex). Contraste mínimo
+ * recomendado entre texto y fondo: 4,5.
  *
  * Significado de cada color de un esquema:
  *   fondo, superficie      Fondo de la app / de tarjetas y hojas
@@ -35,6 +40,10 @@ const PALETAS_CATEGORIAS = {
   suave:  ['#f08a5d', '#6bbf8a', '#6c9be0', '#e5656b', '#a98be0', '#e6b94d', '#e57fb5', '#4fb5aa', '#9cc95a', '#7c86e0', '#9aa3b2'],
   tierra: ['#b97d7b', '#928e5e', '#6f8f8a', '#b5524f', '#8f7aa3', '#c9a24a', '#d68c95', '#5e8a6a', '#a8b26a', '#8b6f5a', '#a39e94'],
 };
+
+/** Colores de categorías de un tema: o el nombre de una paleta, o ya un array de 11 colores. */
+export const coloresCategorias = (tema) =>
+  Array.isArray(tema.categorias) ? tema.categorias : PALETAS_CATEGORIAS[tema.categorias];
 
 /* ---------- Temas ---------- */
 export const TEMAS = [
@@ -155,13 +164,32 @@ export const MODOS = [
 const CLAVE_CACHE = 'gastos-app/tema-vars';
 const consultaOscuro = window.matchMedia('(prefers-color-scheme: dark)');
 
-export const temaPorId = (id) => TEMAS.find((t) => t.id === id) ?? TEMAS[0];
+/* ---------- Temas personalizados ----------
+ * La lista de temas tuyos se la pasa app.js al arrancar (y tras cada cambio),
+ * leída de almacen.js. Un tema tuyo con el mismo `id` que uno de fábrica
+ * lo sustituye (es «un tema de fábrica modificado»).
+ */
+let personalizados = [];
+export function registrarTemasPersonalizados(lista) { personalizados = lista; }
+
+/** Todos los temas disponibles: los de fábrica (o su versión modificada) y los creados por ti. */
+export function listarTemas() {
+  const porId = new Map(personalizados.map((t) => [t.id, t]));
+  const base = TEMAS.map((t) => porId.get(t.id) ?? t);
+  const nuevos = personalizados.filter((t) => !TEMAS.some((b) => b.id === t.id));
+  return [...base, ...nuevos];
+}
+
+export const temaPorId = (id) => listarTemas().find((t) => t.id === id) ?? TEMAS[0];
+export const esDeFabrica = (id) => TEMAS.some((t) => t.id === id);
+export const estaModificado = (id) => esDeFabrica(id) && personalizados.some((t) => t.id === id);
+export const temaOriginal = (id) => TEMAS.find((t) => t.id === id);
 
 /** ¿Hay que usar el esquema oscuro con este modo? ('auto' sigue al sistema) */
 export const esOscuro = (modo) => modo === 'oscuro' || (modo === 'auto' && consultaOscuro.matches);
 
 /** Esquema completo con valores por defecto para los colores opcionales. */
-function esquemaCompleto(tema, esquema) {
+export function esquemaCompleto(tema, esquema) {
   const e = tema[esquema];
   return {
     ...e,
@@ -183,7 +211,7 @@ export function variablesDe(tema, esquema) {
     '--enviar': e.enviar, '--enviar-texto': e.enviarTexto,
     '--acento': e.acento, '--peligro': e.peligro,
   };
-  PALETAS_CATEGORIAS[tema.categorias].forEach((color, i) => {
+  coloresCategorias(tema).forEach((color, i) => {
     vars[`--c-${ORDEN_CATEGORIAS[i]}`] = color;
   });
   return vars;
@@ -192,7 +220,7 @@ export function variablesDe(tema, esquema) {
 /** Colores de muestra para la miniatura del selector de temas. */
 export function muestraDe(tema, esquema) {
   const e = esquemaCompleto(tema, esquema);
-  const cats = PALETAS_CATEGORIAS[tema.categorias];
+  const cats = coloresCategorias(tema);
   return { fondo: e.fondo, superficie: e.superficie, dock: e.dock, enviar: e.enviar, puntos: [cats[0], cats[1], cats[2], cats[4]] };
 }
 
@@ -201,7 +229,9 @@ export function muestraDe(tema, esquema) {
  * para que, la próxima vez, el pequeño script del <head> de index.html pinte
  * los colores correctos ANTES de que cargue el resto (sin parpadeo).
  */
-export function aplicarTema(idTema, modo) {
+export function aplicarTema(idTema, modo, modoGuardado = modo) {
+  // `modo` es lo que se pinta ahora ('auto' | 'claro' | 'oscuro'). `modoGuardado` es lo que se
+  // recuerda para el próximo arranque; difiere solo en el editor, que enseña un esquema concreto.
   const tema = temaPorId(idTema);
   const esquema = esOscuro(modo) ? 'oscuro' : 'claro';
   const raiz = document.documentElement;
@@ -216,7 +246,7 @@ export function aplicarTema(idTema, modo) {
   try {
     localStorage.setItem(
       CLAVE_CACHE,
-      JSON.stringify({ modo, claro: variablesDe(tema, 'claro'), oscuro: variablesDe(tema, 'oscuro') }),
+      JSON.stringify({ modo: modoGuardado, claro: variablesDe(tema, 'claro'), oscuro: variablesDe(tema, 'oscuro') }),
     );
   } catch { /* si no se puede guardar, no pasa nada */ }
 }
@@ -224,4 +254,142 @@ export function aplicarTema(idTema, modo) {
 /** Si el modo es Automático, repinta cuando el móvil cambia entre claro y oscuro. */
 export function vigilarSistema(alCambiar) {
   consultaOscuro.addEventListener('change', alCambiar);
+}
+
+/* ============================================================
+ * Edición de temas
+ * ============================================================ */
+
+/** Todos los colores de un esquema, agrupados como se enseñan en el editor: [clave, etiqueta, ayuda]. */
+export const GRUPOS_COLOR = [
+  { id: 'pantalla', titulo: 'Pantalla', claves: [
+    ['fondo', 'Fondo', 'Detrás de todo'],
+    ['superficie', 'Tarjetas y hojas', 'La hoja de confirmar, las tarjetas'],
+    ['tinta', 'Texto', ''],
+    ['tenue', 'Texto suave', 'Notas y detalles'],
+    ['linea', 'Líneas', 'Separadores entre gastos'],
+    ['realce', 'Zonas suaves', 'Fondo de los selectores'],
+    ['segActivo', 'Opción elegida', 'En los selectores (Circular / Barras...)'],
+  ] },
+  { id: 'boton', titulo: 'Botón Guardar', claves: [
+    ['boton', 'Fondo', ''],
+    ['botonTexto', 'Texto', ''],
+  ] },
+  { id: 'barra', titulo: 'Barra inferior', claves: [
+    ['dock', 'Fondo', 'Donde escribes los gastos'],
+    ['dockTexto', 'Texto', ''],
+    ['dockTenue', 'Texto suave', 'El ejemplo gris del campo'],
+    ['dockCampo', 'Campo para escribir', ''],
+    ['dockSeg', 'Cuenta / Efectivo elegido', ''],
+    ['dockSegTexto', 'Texto del elegido', ''],
+  ] },
+  { id: 'enviar', titulo: 'Botón de enviar', claves: [
+    ['enviar', 'Fondo', ''],
+    ['enviarTexto', 'Flecha', ''],
+  ] },
+  { id: 'detalles', titulo: 'Detalles', claves: [
+    ['acento', 'Acento', 'Casillas, icono de la pestaña activa'],
+    ['peligro', 'Alertas', 'Eliminar y saldos en negativo'],
+  ] },
+];
+
+const CLAVES_ESQUEMA = GRUPOS_COLOR.flatMap((g) => g.claves.map(([clave]) => clave));
+
+/** "#F80", "f80", "#ff8800"... → "#ff8800" (o null si no es un color). */
+export function normalizarHex(texto) {
+  const t = String(texto).trim().replace(/^#/, '').toLowerCase();
+  if (/^[0-9a-f]{3}$/.test(t)) return `#${t[0]}${t[0]}${t[1]}${t[1]}${t[2]}${t[2]}`;
+  if (/^[0-9a-f]{6}$/.test(t)) return `#${t}`;
+  return null;
+}
+
+/** Copia independiente y COMPLETA de un tema (todos los colores explícitos, categorías como array). */
+export function temaCompleto(tema) {
+  return {
+    id: tema.id,
+    nombre: tema.nombre,
+    categorias: [...coloresCategorias(tema)],
+    claro: { ...esquemaCompleto(tema, 'claro') },
+    oscuro: { ...esquemaCompleto(tema, 'oscuro') },
+  };
+}
+
+/** Tema nuevo (id propio) a partir de otro: es la base para «Crear tema» y «Duplicar». */
+export function crearTemaNuevo(base, nombre) {
+  const copia = temaCompleto(base);
+  copia.id = `mi-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+  copia.nombre = nombre;
+  return copia;
+}
+
+/**
+ * Valida un tema que viene de fuera (copia de seguridad o datos guardados).
+ * Los colores que falten o estén mal se rellenan con los del tema Tinta.
+ * Devuelve un tema limpio o null si no tiene ni id.
+ */
+export function sanearTema(t) {
+  if (!t || typeof t !== 'object' || !/^[\w-]{1,40}$/.test(String(t.id ?? ''))) return null;
+  const respaldo = TEMAS[0];
+  const esquema = (nombre) => {
+    const origen = t[nombre] && typeof t[nombre] === 'object' ? t[nombre] : {};
+    const salida = {};
+    for (const clave of CLAVES_ESQUEMA) {
+      salida[clave] = normalizarHex(origen[clave] ?? '') ?? esquemaCompleto(respaldo, nombre)[clave];
+    }
+    return salida;
+  };
+  const cats = coloresCategorias(respaldo).map((c, i) => normalizarHex(t.categorias?.[i] ?? '') ?? c);
+  return {
+    id: String(t.id),
+    nombre: String(t.nombre ?? '').trim().slice(0, 24) || 'Mi tema',
+    categorias: cats,
+    claro: esquema('claro'),
+    oscuro: esquema('oscuro'),
+  };
+}
+
+/* ---------- Legibilidad ---------- */
+
+function luminancia(hex) {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+
+/** Contraste entre dos colores (1 = igual, 21 = blanco sobre negro). */
+export function contraste(a, b) {
+  const [claro, oscuro] = [luminancia(a), luminancia(b)].sort((x, y) => y - x);
+  return (claro + 0.05) / (oscuro + 0.05);
+}
+
+/** Blanco o casi negro, el que mejor se lea sobre ese fondo. */
+export const textoLegibleSobre = (fondo) => (contraste('#ffffff', fondo) >= contraste('#111111', fondo) ? '#ffffff' : '#111111');
+
+// [texto, fondo, contraste mínimo, mensaje]
+const PARES_LEGIBILIDAD = [
+  ['tinta', 'fondo', 4.5, 'El texto se parece demasiado al fondo.'],
+  ['tinta', 'superficie', 4.5, 'El texto se parece demasiado al color de las tarjetas.'],
+  ['tenue', 'fondo', 3.5, 'El texto suave casi no se ve sobre el fondo.'],
+  ['botonTexto', 'boton', 4.5, 'El texto del botón Guardar no se lee bien.'],
+  ['dockTexto', 'dock', 4.5, 'El texto de la barra inferior no se lee bien.'],
+  ['dockTexto', 'dockCampo', 4.5, 'Lo que escribes en la barra inferior casi no se ve.'],
+  ['dockTenue', 'dockCampo', 3.5, 'El ejemplo gris del campo para escribir casi no se ve.'],
+  ['dockSegTexto', 'dockSeg', 4.5, 'El texto de Cuenta/Efectivo elegido no se lee bien.'],
+  ['enviarTexto', 'enviar', 3, 'La flecha del botón de enviar casi no se ve.'],
+  ['peligro', 'superficie', 3.5, 'El color de las alertas casi no se ve sobre las tarjetas.'],
+];
+
+/** Lista de problemas de lectura de un esquema (vacía si todo se ve bien). */
+export function avisosLegibilidad(esquema) {
+  return PARES_LEGIBILIDAD.filter(([texto, fondo, minimo]) => contraste(esquema[texto], esquema[fondo]) < minimo)
+    .map(([, , , mensaje]) => mensaje);
+}
+
+/** Pone blanco o negro en todos los textos para que se lean sobre sus fondos. Modifica el esquema recibido. */
+export function ajustarTextos(esquema) {
+  esquema.tinta = textoLegibleSobre(esquema.fondo);
+  esquema.botonTexto = textoLegibleSobre(esquema.boton);
+  esquema.dockTexto = textoLegibleSobre(esquema.dock);
+  esquema.dockSegTexto = textoLegibleSobre(esquema.dockSeg);
+  esquema.enviarTexto = textoLegibleSobre(esquema.enviar);
 }
