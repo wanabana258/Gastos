@@ -14,11 +14,15 @@
  *     movimientos: [{ id, tipo, cent, concepto, metodo, destino?, fecha, creado }],
  *     saldos: null | { cuenta, efectivo, desde },
  *     aprendido: { "ramen": "comida", ... },     // palabra → categoría
+ *     temas: [ ...temas de color creados o modificados por el usuario (ver temas.js) ],
+ *     pagos: [ ...pagos fijos y recordatorios (ver pagos.js) ],
+ *     limites: { "ocio": 6000, ... },           // tope mensual por categoría, en céntimos
  *     prefs: { metodo, grafica, tema, modo }
  *   }
  *   - cent: importe en céntimos (entero)
  *   - metodo: "cuenta" | "efectivo"
  *   - fecha: "AAAA-MM-DD"        - creado: marca de tiempo (ms)
+ *   - gastos creados por un pago fijo llevan además `pagoId` (el id de ese pago)
  *   - movimientos: dinero que NO es un gasto:
  *       tipo "ingreso":  entra dinero en `metodo`
  *       tipo "traspaso": sale de `metodo` y entra en `destino` (p. ej. cajero: cuenta → efectivo)
@@ -35,6 +39,9 @@
 
 import { categoriaPorId } from './categorias.js';
 import { crearId } from './utils.js';
+import { sanearTema } from './temas.js';
+import { sanearPago } from './pagos.js';
+import { sanearLimites } from './analisis.js';
 
 const CLAVE = 'gastos-app/datos-v1'; // se mantiene igual para no perder datos de la versión 1
 
@@ -44,6 +51,9 @@ const datosVacios = () => ({
   movimientos: [],
   saldos: null,
   aprendido: {},
+  temas: [],
+  pagos: [],
+  limites: {},
   prefs: { metodo: 'cuenta', grafica: 'circular', tema: 'tinta', modo: 'auto' },
 });
 
@@ -65,6 +75,9 @@ function cargar() {
       movimientos: Array.isArray(d.movimientos) ? d.movimientos : [],
       saldos: d.saldos && typeof d.saldos === 'object' ? d.saldos : null,
       aprendido: d.aprendido && typeof d.aprendido === 'object' ? d.aprendido : {},
+      temas: (Array.isArray(d.temas) ? d.temas : []).map(sanearTema).filter(Boolean),
+      pagos: (Array.isArray(d.pagos) ? d.pagos : []).map(sanearPago).filter(Boolean),
+      limites: sanearLimites(d.limites),
       prefs: { ...base.prefs, ...(d.prefs || {}) },
     };
   } catch (error) {
@@ -99,9 +112,14 @@ export function gastosDelMes(mes) {
 
 export const obtenerGasto = (id) => datos.gastos.find((g) => g.id === id);
 
-/** Crea un gasto nuevo y lo devuelve (con su id). */
-export function agregarGasto({ cent, concepto, cat, metodo, fecha }) {
-  const gasto = { id: crearId(), cent, concepto, cat, metodo, fecha, creado: Date.now() };
+/**
+ * Crea un gasto nuevo y lo devuelve (con su id).
+ * `pagoId` (opcional) lo vincula a un pago fijo; `creado` (opcional) fija la marca de tiempo
+ * (los pagos automáticos la ponen en la fecha en que tocaban, ver pagos y saldos en app.js).
+ */
+export function agregarGasto({ cent, concepto, cat, metodo, fecha, pagoId, creado }) {
+  const gasto = { id: crearId(), cent, concepto, cat, metodo, fecha, creado: creado ?? Date.now() };
+  if (pagoId) gasto.pagoId = pagoId;
   datos.gastos.push(gasto);
   persistir();
   return gasto;
@@ -203,6 +221,59 @@ export function corregirSaldo(metodo, cent) {
   persistir();
 }
 
+/* ---------- Pagos fijos y recordatorios ---------- */
+
+export const listarPagos = () => datos.pagos;
+export const obtenerPago = (id) => datos.pagos.find((p) => p.id === id);
+
+/** Guarda un pago (nuevo, o sustituye al que tenga el mismo id). */
+export function guardarPago(pago) {
+  const copia = JSON.parse(JSON.stringify(pago));
+  const i = datos.pagos.findIndex((p) => p.id === copia.id);
+  if (i >= 0) datos.pagos[i] = copia;
+  else datos.pagos.push(copia);
+  persistir();
+}
+
+/** Borra un pago y lo devuelve (para poder deshacer). Los gastos que ya generó se quedan en el historial. */
+export function eliminarPago(id) {
+  const i = datos.pagos.findIndex((p) => p.id === id);
+  if (i < 0) return null;
+  const [borrado] = datos.pagos.splice(i, 1);
+  persistir();
+  return borrado;
+}
+
+/** Marca una ocurrencia (mes «AAAA-MM») como resuelta: { gastoId } o { omitido: true }. Con null la reabre. */
+export function marcarOcurrencia(idPago, mes, valor) {
+  const p = obtenerPago(idPago);
+  if (!p) return;
+  p.hechas ??= {};
+  if (valor) p.hechas[mes] = valor;
+  else delete p.hechas[mes];
+  persistir();
+}
+
+/** «Más tarde»: oculta la ocurrencia de la lista de pendientes hasta esa fecha. */
+export function aplazarOcurrencia(idPago, mes, fecha) {
+  const p = obtenerPago(idPago);
+  if (!p) return;
+  p.aplazado ??= {};
+  p.aplazado[mes] = fecha;
+  persistir();
+}
+
+/* ---------- Límites mensuales por categoría ---------- */
+
+/** { categoría: céntimos }. Una categoría sin límite no aparece. */
+export const limites = () => datos.limites;
+
+/** Sustituye todos los límites (las categorías en blanco/0 se quitan). */
+export function guardarLimites(nuevos) {
+  datos.limites = sanearLimites(nuevos);
+  persistir();
+}
+
 /* ---------- Palabras aprendidas ---------- */
 
 export const aprendido = () => datos.aprendido;
@@ -211,6 +282,28 @@ export const guardarAprendido = () => persistir();
 export function olvidarPalabra(palabra) {
   delete datos.aprendido[palabra];
   persistir();
+}
+
+/* ---------- Temas de color propios ---------- */
+
+export const listarTemasPersonalizados = () => datos.temas;
+
+/** Guarda un tema (nuevo, o sustituye al que tenga el mismo id). */
+export function guardarTemaPersonalizado(tema) {
+  const copia = JSON.parse(JSON.stringify(tema));
+  const i = datos.temas.findIndex((t) => t.id === copia.id);
+  if (i >= 0) datos.temas[i] = copia;
+  else datos.temas.push(copia);
+  persistir();
+}
+
+/** Borra un tema propio (si era una modificación de uno de fábrica, vuelve el original). */
+export function eliminarTemaPersonalizado(id) {
+  const i = datos.temas.findIndex((t) => t.id === id);
+  if (i < 0) return null;
+  const [borrado] = datos.temas.splice(i, 1);
+  persistir();
+  return borrado;
 }
 
 /* ---------- Preferencias (último método de pago, gráfica, tema) ---------- */
@@ -223,17 +316,20 @@ export function guardarPreferencia(nombre, valor) {
 
 /* ---------- Copia de seguridad e importación ---------- */
 
-/** Texto JSON con TODO (gastos, movimientos, saldos y palabras aprendidas). */
+/** Texto JSON con TODO (gastos, movimientos, saldos, pagos fijos, límites, palabras aprendidas y temas de color). */
 export function copiaCompletaJSON() {
   return JSON.stringify(
     {
       app: 'gastos',
-      version: 2,
+      version: 5,
       exportado: new Date().toISOString(),
       gastos: datos.gastos,
       movimientos: datos.movimientos,
       saldos: datos.saldos,
       aprendido: datos.aprendido,
+      temas: datos.temas,
+      pagos: datos.pagos,
+      limites: datos.limites,
     },
     null,
     2,
@@ -250,6 +346,9 @@ export function leerCopiaJSON(texto) {
     movimientos: Array.isArray(d.movimientos) ? d.movimientos : [],
     saldos: d.saldos ?? null,
     aprendido: d.aprendido ?? {},
+    temas: Array.isArray(d.temas) ? d.temas : [],
+    pagos: Array.isArray(d.pagos) ? d.pagos : [],
+    limites: d.limites ?? {},
   };
 }
 
@@ -271,6 +370,7 @@ function sanearGasto(g) {
     fecha,
     // Sin `creado` (CSV hecho a mano) usamos su fecha: así no resta de un saldo ya configurado
     creado: Number.isFinite(g.creado) ? g.creado : creadoDesdeFecha(fecha),
+    ...(typeof g.pagoId === 'string' && g.pagoId ? { pagoId: g.pagoId } : {}),
   };
 }
 
@@ -303,9 +403,11 @@ const claveGasto = (g) => `${g.fecha}|${g.cent}|${g.concepto.toLowerCase()}|${g.
  *  - si no (CSV hecho a mano), se compara por fecha+importe+concepto+método
  *    contra lo que YA había antes de importar.
  * Los saldos del archivo solo se adoptan si este dispositivo aún no tiene los suyos.
- * @returns {{agregados:number, repetidos:number, invalidos:number, movimientos:number, saldosRestaurados:boolean}}
+ * Los temas de color y los pagos del archivo se añaden si aquí no existe otro con el mismo id.
+ * Los límites del archivo solo rellenan las categorías que aquí aún no tienen límite.
+ * @returns {{agregados:number, repetidos:number, invalidos:number, movimientos:number, saldosRestaurados:boolean, temas:number, pagos:number}}
  */
-export function fusionar({ gastos = [], movimientos = [], saldos = null, aprendido: nuevasPalabras = {} }) {
+export function fusionar({ gastos = [], movimientos = [], saldos = null, aprendido: nuevasPalabras = {}, temas = [], pagos = [], limites: nuevosLimites = {} }) {
   const ids = new Set(datos.gastos.map((g) => g.id));
   const clavesPrevias = new Set(datos.gastos.map(claveGasto));
   let agregados = 0, repetidos = 0, invalidos = 0, movsNuevos = 0;
@@ -342,6 +444,23 @@ export function fusionar({ gastos = [], movimientos = [], saldos = null, aprendi
   for (const [palabra, cat] of Object.entries(nuevasPalabras)) {
     if (!Object.hasOwn(datos.aprendido, palabra) && categoriaPorId(cat).id === cat) datos.aprendido[palabra] = cat;
   }
+  // Temas de color: solo los que aquí no existen
+  let temasNuevos = 0;
+  for (const crudo of temas) {
+    const t = sanearTema(crudo);
+    if (t && !datos.temas.some((x) => x.id === t.id)) { datos.temas.push(t); temasNuevos++; }
+  }
+  // Pagos fijos: solo los que aquí no existen
+  let pagosNuevos = 0;
+  for (const crudo of pagos) {
+    const pago = sanearPago(crudo);
+    if (pago && !datos.pagos.some((x) => x.id === pago.id)) { datos.pagos.push(pago); pagosNuevos++; }
+  }
+  // Límites: solo las categorías que aquí no tienen
+  let limitesNuevos = 0;
+  for (const [cat, cent] of Object.entries(sanearLimites(nuevosLimites))) {
+    if (!Object.hasOwn(datos.limites, cat)) { datos.limites[cat] = cent; limitesNuevos++; }
+  }
   persistir();
-  return { agregados, repetidos, invalidos, movimientos: movsNuevos, saldosRestaurados };
+  return { agregados, repetidos, invalidos, movimientos: movsNuevos, saldosRestaurados, temas: temasNuevos, pagos: pagosNuevos, limites: limitesNuevos };
 }
