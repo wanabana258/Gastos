@@ -6,7 +6,9 @@
  * 1) OFFLINE (estrategia «stale-while-revalidate»):
  *    responde al instante con la copia guardada y, en segundo plano, descarga la
  *    versión nueva. Los cambios que hagas en el código se ven al abrir la app
- *    dos veces.
+ *    dos veces. La descarga en segundo plano le pregunta SIEMPRE al servidor si hay
+ *    algo nuevo (cache: 'no-cache'); si no, GitHub Pages haría que el navegador
+ *    reutilizara su copia durante 10 minutos y los cambios tardarían en llegar.
  *
  * 2) AVISOS DE PAGOS con la app cerrada:
  *    Chrome despierta este archivo de vez en cuando («periodic background sync»,
@@ -18,14 +20,14 @@
  * comparte con la app la lógica de js/pagos.js.
  *
  * IMPORTANTE: si AÑADES o RENOMBRAS archivos, súbelos, añádelos a ARCHIVOS y
- * cambia VERSION (por ejemplo a 'v6'). Los datos NO se tocan nunca.
+ * cambia VERSION (por ejemplo a 'v7'). Los datos NO se tocan nunca.
  * ============================================================ */
 
 import { calcularEstado, cuando } from './js/pagos.js';
 import { leerKV, guardarKV } from './js/idb.js';
 import { fechaISO, formatearEuros } from './js/utils.js';
 
-const VERSION = 'v5';
+const VERSION = 'v6';
 const CACHE = `gastos-${VERSION}`;
 
 // Todo lo necesario para arrancar sin internet (rutas relativas: valen en GitHub Pages)
@@ -53,9 +55,24 @@ const ARCHIVOS = [
 
 /* ---------- Offline ---------- */
 
-// Instalación: guardar todos los archivos en la caché
+// Instalación: guardar todos los archivos en la caché.
+// cache: 'reload' = saltarse la copia que el navegador pueda tener, para no guardar versiones viejas.
+// Si un archivo falla o falta, no se aborta: la app avisará de cuál falta (ver index.html).
 self.addEventListener('install', (evento) => {
-  evento.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  evento.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      await Promise.all(
+        ARCHIVOS.map(async (archivo) => {
+          try {
+            const respuesta = await fetch(new Request(archivo, { cache: 'reload' }));
+            if (respuesta.ok) await cache.put(archivo, respuesta);
+          } catch { /* sin conexión o archivo ausente */ }
+        }),
+      );
+      await self.skipWaiting();
+    })(),
+  );
 });
 
 // Activación: borrar cachés de versiones anteriores y tomar el control
@@ -73,10 +90,22 @@ self.addEventListener('fetch', (evento) => {
   const peticion = evento.request;
   if (peticion.method !== 'GET' || new URL(peticion.url).origin !== self.location.origin) return;
 
+  // Cuando la app pide un archivo «de verdad fresco» (cache: 'reload' o 'no-store', p. ej. el botón
+  // «Actualizar la app ahora»), se va directo al servidor y se actualiza la copia guardada.
+  if (peticion.cache === 'reload' || peticion.cache === 'no-store') {
+    evento.respondWith(
+      fetch(peticion.url, { cache: peticion.cache }).then(async (respuesta) => {
+        if (respuesta.ok) (await caches.open(CACHE)).put(peticion.url, respuesta.clone());
+        return respuesta;
+      }),
+    );
+    return;
+  }
+
   evento.respondWith(
     caches.open(CACHE).then(async (cache) => {
       const guardada = await cache.match(peticion, { ignoreSearch: true });
-      const red = fetch(peticion)
+      const red = fetch(peticion.url, { cache: 'no-cache' }) // pregunta al servidor si hay versión nueva
         .then((respuesta) => {
           if (respuesta.ok) cache.put(peticion, respuesta.clone());
           return respuesta;
